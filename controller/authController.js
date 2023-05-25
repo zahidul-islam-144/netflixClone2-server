@@ -9,83 +9,134 @@ const resetPasswordToken = require("../utilities/resetPasswordToken");
 const sendEmail = require("../utilities/sendEmail");
 const { ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
-const { cookieOptions } = require("../utilities/jwtService");
+const { cookieOptions, identifyEmailOrPhnNumber } = require("../utilities/services");
 const catchAsyncError = require("../middleware/catchAsyncError");
-const { validationResult } = require("express-validator");
+const { validationResult, matchedData } = require("express-validator");
+const {
+  validationErrorHandler,
+} = require("../error_handler/validationErrorHandler");
+const { messageItems } = require("../utilities/userService/messages");
+const { configureTokenTypeToResetPassword } = require("../utilities/resetTokenType");
 
 
-// Register a User
+
+
 exports.register = catchAsyncError(async (req, res, next) => {
-  // console.log("💛register=catchAsyncError ~ req:", req)
-  const { uniqueId, name, password } = req.body;
-  console.log("💛register=catchAsyncError ~ req:", req.body)
-  const results =  validationResult(req)
-    console.log("💛results:", results)
-    // sendToken(user, 201, res);
+  const results = validationResult(req);
+
+  if (!results.isEmpty()) {
+    validationErrorHandler(results, res);
+  } else {
+    const { name, uniqueId, password, confirmPassword } = matchedData(req);
+    const isExist = await User.findOne({ uniqueId: uniqueId });
+
+    if (!isExist) {
+      const result = generateStrongPassword(password);
+      const newUser = await User.create({
+        name,
+        uniqueId,
+        password: result.hash,
+        confirmPassword: result.hash,
+        salt: result.salt,
+        userStatus: {
+          isRegistered: true,
+        },
+      });
+      console.log("💛 newUser:", newUser);
+      res
+        .status(200)
+        .json({
+          success: true,
+          message: "Your registration process successfully completed.",
+        })
+        .end();
+    } else {
+      return next(
+        new ErrorResponse(
+          "User already exist. Try another email or phone number that isn't used before.",
+          409
+        )
+      );
+    }
+  }
+
+  // sendToken(user, 201, res);
   // }
 });
 
-
-// Login user
 exports.login = catchAsyncError(async (req, res, next) => {
-  const { email, password } = req.body;
+  const results = validationResult(req);
 
-  if (!email || !password) {
-    return next(new ErrorResponse("Write email and password correctly.", 400));
-  }
-  const currentlyLogInUser = await User.findOne({ email: email }).select(
-    "+password +salt"
-  );
-
-  const isPasswordMatched = validatePassword(
-    password,
-    currentlyLogInUser.password,
-    currentlyLogInUser.salt
-  );
-
-  if (currentlyLogInUser && isPasswordMatched) {
-    // console.log("💛currentlyLogInUser:", currentlyLogInUser);
-    const accessToken = createToken(currentlyLogInUser, "JWT_ACCESS_TOKEN");
-    const newRefreshToken = createToken(currentlyLogInUser, "REFRESH_TOKEN");
-    // saving into database
-    currentlyLogInUser.userStatus.isLogin = true;
-    currentlyLogInUser.userStatus.loginTime = Date.now();
-    currentlyLogInUser.refreshToken = [
-      {
-        token: newRefreshToken,
-        tokenCreatedAt: Date.now(),
-        tokenLastUsedAt: null,
-      },
-    ];
-    const result = await currentlyLogInUser.save();
-    // console.log("💛 result:", result);
-
-    console.log("💛JWT_Token:", accessToken);
-    console.log("💛newRefreshToken:", newRefreshToken);
-
-    // Creates Secure Cookie with refresh token
-    res
-      .status(200)
-      .cookie("accessToken", accessToken, cookieOptions)
-      .json({
-        success: true,
-        message: `${currentlyLogInUser.name} successfully login.`,
-        loggedin_user: currentlyLogInUser.name,
-      });
+  if (!results.isEmpty()) {
+    validationErrorHandler(results, res);
   } else {
-    return next(new ErrorResponse("Credential Mismatch!", 401));
+    const { uniqueId, password } = matchedData(req);
+    const currentlyLogInUser = await User.findOne({ uniqueId }).select(
+      "+password +salt"
+    );
+    console.log("💛currentlyLogInUser:", currentlyLogInUser);
+
+    const isPasswordMatched = validatePassword(
+      password,
+      currentlyLogInUser.password,
+      currentlyLogInUser.salt
+    );
+
+    if (currentlyLogInUser && isPasswordMatched) {
+      console.log("💛currentlyLogInUser:", currentlyLogInUser);
+     
+      const accessToken = createToken(currentlyLogInUser, "JWT_ACCESS_TOKEN");
+      const newRefreshToken = createToken(currentlyLogInUser, "REFRESH_TOKEN");
+      // saving into database
+      // currentlyLogInUser.userIP = clientIp;
+      currentlyLogInUser.userStatus.isLogin = true;
+      currentlyLogInUser.userStatus.isLogout = false;
+      currentlyLogInUser.userStatus.lastLogin = Date.now();
+      currentlyLogInUser.refreshToken = [
+        {
+          token: newRefreshToken,
+          tokenCreatedAt: Date.now(),
+        },
+      ];
+      const result = await currentlyLogInUser.save();
+      // console.log("result:", result);
+
+      console.log("💛JWT_Token:", accessToken);
+      console.log("💛newRefreshToken:", newRefreshToken);
+
+      // Creates Secure Cookie with refresh token
+      res
+        .status(200)
+        .cookie("accessToken", accessToken, cookieOptions)
+        .json({
+          success: true,
+          message: `${currentlyLogInUser.name} successfully login.`,
+          loggedin_user: currentlyLogInUser.name,
+        });
+    } else {
+      return next(new ErrorResponse("Credential Mismatch!", 401));
+    }
   }
 });
 
-
-// Logout User
 exports.logout = catchAsyncError(async (req, res, next) => {
-  // const deleteRefreshTokenInDB = await User.findOneAndUpdate({refreshToken: []})
-  // console.log("💛deleteRefreshTokenInDB:", deleteRefreshTokenInDB)
+  const currentlyLogInUser = await User.findOne({ _id: req.params.id });
+  currentlyLogInUser.userStatus.isLogin = false,
+  currentlyLogInUser.userStatus.isLogout = true,
+  currentlyLogInUser.userStatus.lastLogout = Date.now(),
+  currentlyLogInUser.refreshToken = [
+    {
+      token: null,
+      tokenCreatedAt: null,
+      tokenLastUsedAt: null,
+      tokenDeletedAt: Date.now(),
+    },
+  ]
+  await currentlyLogInUser.save();
 
   res
     .status(200)
-    .cookie("accessTokenen", null, {
+    .cookie("accessToken", null, {
       expires: new Date(Date.now()),
       httpOnly: true,
       secure: true,
@@ -93,11 +144,11 @@ exports.logout = catchAsyncError(async (req, res, next) => {
     })
     .json({
       success: true,
-      message: "Logged Out !",
+      message: "Successfully log out.",
     })
     .end();
 
-  // another approach to clear cookies sending response
+  // ** another approach to clear cookies sending response
   // res
   //   .clearCookie("accessToken")
   //   .json({
@@ -107,90 +158,58 @@ exports.logout = catchAsyncError(async (req, res, next) => {
   //   .end();
 });
 
-
-// Forgot Password
 exports.forgotPassword = catchAsyncError(async (req, res, next) => {
-  const user = await User.findOne({ email: req.body.email });
+  const user = await User.findOne({ _id: req.params.id });
 
   if (!user) {
-    return next(new ErrorResponse("User not found !", 404));
-  }
-  console.log("user:", user);
-  const resetToken = resetPasswordToken();
-  const setResetToken = {
-    $set: { passwordResetToken: { resetToken }, tokenCreatedAt: Date.now() },
-  };
-  if (user.email == req.body.email) {
-    await User.updateOne({ passwordResetToken: setResetToken });
-  }
-  // await user.save({ validateBeforeSave: false });
-
-  const resetPasswordUrl = `${req.protocol}://${req.get(
-    "host"
-  )}/password/reset/${resetToken}`;
-
-  const message = `Your password reset token is : \n\n ${resetPasswordUrl} \n\nIf you have not requested this email then, please ignore it.`;
-
-  try {
-    await sendEmail({
-      email: user.email,
-      subject: `Password Recovery request.`,
-      message,
-    });
-    res.status(200).json({
-      success: true,
-      message: `Email is sent to ${user.email} successfully`,
-    });
-  } catch (error) {
-    await user.save({ validateBeforeSave: false });
-    return next(new ErrorResponse(error.message, 500));
+    return next(new ErrorResponse(messageItems.forgotPassword.userNotFound, 404));
+  }else {
+    const type = identifyEmailOrPhnNumber(req.body.uniqueId);
+    configureTokenTypeToResetPassword(req, user, type)
   }
 });
 
-
 // Refresh-Token
 exports.callRfreshTokenToGetAccessToken = catchAsyncError(
-    async (req, res, next) => {
-      const currentlyLogInUser = await User.findOne({
-        _id: ObjectId(req.params.id),
-      });
-      if (currentlyLogInUser.userStatus.isLogin) {
-        try {
-          const decodeRefreshToken = jwt.verify(
-            currentlyLogInUser.refreshToken[0].token,
-            process.env.REFRESH_TOKEN_SECRET
-          );
-          currentlyLogInUser.refreshToken[0].tokenLastUsedAt = Date.now();
-          await currentlyLogInUser.save();
-  
-          if (decodeRefreshToken.userId === currentlyLogInUser.userId) {
-            res
-              .status(200)
-              .cookie(
-                "accessToken",
-                createToken(currentlyLogInUser, "JWT_ACCESS_TOKEN"),
-                cookieOptions
-              )
-              .json({
-                success: true,
-                isAuthorized: true,
-                message: `${currentlyLogInUser.name} successfully re-authorized.`,
-                loggedin_user: currentlyLogInUser.name,
-              })
-              .end();
-          }
-        } catch (error) {
-          console.log("💛 re-authorized: error:", error);
-          return next(
-            new ErrorResponse("Forbidden Access! Try to login again.", 403)
-          );
+  async (req, res, next) => {
+    const currentlyLogInUser = await User.findOne({
+      _id: ObjectId(req.params.id),
+    });
+    if (currentlyLogInUser.userStatus.isLogin) {
+      try {
+        const decodeRefreshToken = jwt.verify(
+          currentlyLogInUser.refreshToken[0].token,
+          process.env.REFRESH_TOKEN_SECRET
+        );
+        currentlyLogInUser.refreshToken[0].tokenLastUsedAt = Date.now();
+        await currentlyLogInUser.save();
+
+        if (decodeRefreshToken.userId === currentlyLogInUser.userId) {
+          res
+            .status(200)
+            .cookie(
+              "accessToken",
+              createToken(currentlyLogInUser, "JWT_ACCESS_TOKEN"),
+              cookieOptions
+            )
+            .json({
+              success: true,
+              isAuthorized: true,
+              message: `${currentlyLogInUser.name} successfully re-authorized.`,
+              loggedin_user: currentlyLogInUser.name,
+            })
+            .end();
         }
+      } catch (error) {
+        console.log("💛 re-authorized: error:", error);
+        return next(
+          new ErrorResponse("Forbidden Access! Try to login again.", 403)
+        );
       }
     }
-  );
+  }
+);
 
-
-  
 // exports.getUserDetails = catchAsyncError(async (req, res, next) => {
 //   // console.log("💛req.params.userId:", req.params.userId)
 //   const user = await User.findOne({ userId: req.params.userId });
@@ -238,6 +257,13 @@ exports.callRfreshTokenToGetAccessToken = catchAsyncError(
 // });
 
 
+
+
+
+
+
+
+
 /*
 
 
@@ -267,5 +293,25 @@ exports.callRfreshTokenToGetAccessToken = catchAsyncError(
         message: "Successfully cretaed a user !",
       })
       .end();
-
+=========
+  await User.updateOne(
+    { _id: req.params.id },
+    {
+      $set: {
+        userStatus: {
+          isLogin: false,
+          isLogout: true,
+          lastLogout: Date.now(),
+        },
+        refreshToken: [
+          {
+            token: null,
+            tokenCreatedAt: null,
+            tokenLastUsedAt: null,
+            tokenDeletedAt: Date.now(),
+          },
+        ],
+      },
+    }
+  );
 */

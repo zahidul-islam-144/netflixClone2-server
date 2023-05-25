@@ -13,8 +13,8 @@ const resetPasswordToken = () => {
 };
 console.log("-",resetPasswordToken());
 
-// const expiry = () => {
-// const expiryLimit = 15*60*1000;
-// const now = Date.now()
-// }
+
+
+
+
 module.exports = resetPasswordToken;

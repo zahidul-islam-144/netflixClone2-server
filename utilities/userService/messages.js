@@ -1,4 +1,4 @@
-exports.errorMessageItems = {
+exports.messageItems = {
   nameError: {
     notEmpty: "Name field is required.",
     isChar_withWhiteSpace: "Only Characters with white space are allowed.",
@@ -10,6 +10,7 @@ exports.errorMessageItems = {
     userExists: "User already in use.",
     isEmail: "Your email isn't valid.",
     isPhoneNumber: "Your phone number isn't valid.",
+    uniqeIdError: "Your email or phone number isn't valid. Please, provide at least one valid contact info."
   },
 
   passwordError: {
@@ -21,4 +22,14 @@ exports.errorMessageItems = {
     isSpecialCharacter: "At least one special character.",
     isWhiteSpace: "White space not allowed.",
   },
+
+  loginError:{
+    notEmptyUniqueId: "Unique id is missing. Please, insert your unique id to login.",
+    uniqueIdError: "Credential is not valid. Please, Try again.",
+    notEmptyPassword: "Password is missing. Please, type your password to login.",
+  },
+
+  forgotPassword:{
+    userNotFound: 'User Not Found. Try again your registered unique id.',
+  }
 };

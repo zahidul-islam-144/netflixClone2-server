@@ -221,3 +221,118 @@ exports.getUserDetails = catchAsyncError(async (req, res, next) => {
 //   await user.save();
 //   sendToken(user, 200, res);
 // });
+
+=====
+
+exports.createUserValidation = catchAsyncError(async (req, res, next) => {
+
+  [
+    await check("name")
+      .notEmpty()
+      .withMessage(nameError.notEmpty)
+      .matches(/^[a-zA-Z ]*$/)
+      .withMessage(nameError.isChar_withWhiteSpace)
+      .run(req),
+
+    await check("uniqueId")
+      .notEmpty()
+      .withMessage(uniqueIdError.notEmpty)
+      .custom((value, req) => {
+        if (value.indexOf("@") === -1) {
+          return value
+            .trim()
+            .match(/(^(\+88|0088)?(01){1}[3456789]{1}(\d){8})$/);
+        } else {
+          return value
+            .trim()
+            .toLowerCase()
+            .match(
+              /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|.(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+            );
+        }
+      })
+      .withMessage(uniqueIdError.uniqeIdError)
+      .run(req),
+
+    await check("password")
+      .trim()
+      .notEmpty()
+      .withMessage(passwordError.notEmpty)
+      .isLength({ min: 6, max: 16 })
+      .withMessage(passwordError.isLength)
+      .matches(/(?=.*?[A-Z])/)
+      .withMessage(passwordError.isUpperCase)
+      .matches(/(?=.*?[a-z])/)
+      .withMessage(passwordError.isLowerCase)
+      .matches(/(?=.*?[0-9])/)
+      .withMessage(passwordError.isNumber)
+      .matches(/(?=.*?[#?!@$%^&*-])/)
+      .withMessage(passwordError.isSpecialCharacter)
+      .not()
+      .matches(/^$|\s+/)
+      .withMessage(passwordError.isWhiteSpace)
+      .run(req),
+
+    // confirm password validation
+    // check("confirmPassword").custom((value, { req }) => {
+    //   if (value !== password) {
+    //     throw new ErrorResponse(
+    //       "Password Confirmation does not match password."
+    //     );
+    //   }
+    //   return true;
+    // }),
+  ];
+  next();
+});
+
+============ rate limit-ip-based
+
+import { v4 as uuidv4 } from "uuid";
+
+export default defineComponent({
+  props: {
+    ip: {
+      type: "string",
+      label: "Client IP Address",
+    },
+    dataStore: {
+      type: "data_store",
+      label: "Data Store",
+    },
+  },
+  async run({ $ }) {                                                                                                                                                                                                      const ip = this.ip;
+    const dataStore = this.dataStore;
+    const rateLimit = 5;
+const windowSize = 60 * 1000; // 1 minute in milliseconds                                                                                                                                                
+
+    const currentTime = Date.now();
+    const key = `rate_limit_${ip}`;
+
+    let requestTimestamps = await dataStore.get(key) || [];
+
+    // Remove timestamps older than the window size
+    requestTimestamps = requestTimestamps.filter(
+      (timestamp) => currentTime - timestamp < windowSize
+    );
+
+    if (requestTimestamps.length >= rateLimit) {
+      // Rate limit exceeded, return HTTP 429 status code
+      return $.respond({
+        status: 429,
+        body: "Rate limit exceeded. Please wait before making more requests.",
+      });
+    }
+
+    // Add the current request timestamp and update the data store
+    requestTimestamps.push(currentTime);
+    await dataStore.set(key, requestTimestamps);
+
+    // Process the request and return the response
+    const requestId = uuidv4();
+    return {
+      requestId,
+      message: "Request processed successfully.",
+    };
+  },
+});

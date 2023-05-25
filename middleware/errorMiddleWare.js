@@ -25,7 +25,7 @@ module.exports = (err, req, res, next) => {
   if(err.name === 'TypeError'){
     // err.message = 'Invalid arguments.'
     // err.statusCode = 406
-    err = new errorHandler('Invalid credentials.', 406);
+    err = new errorHandler('Invalid arguments. Please, check codes, syntax, all braces, comma, semicolon are missing or not', 406);
   }
 
 

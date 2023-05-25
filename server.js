@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const app = require("./config/app");
 const PORT = process.env.PORT;
 const connectDatabase = require("./config/mongoDbConfig");
+const { connectRedis } = require("./config/redisConfig");
 
 
 // Handling Uncaught Exception
@@ -18,6 +19,9 @@ process.on("uncaughtException", (err) => {
   -------- Mongodb Connection --------
  */
 connectDatabase();
+
+// Redis connection
+// connectRedis();
 
 /*
   -------- server status --------

@@ -2,21 +2,49 @@ const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 const validator = require("validator");
 
+// const userId = {
+//   type: String,
+//   default: new mongoose.Types.ObjectId(),
+//   unique: true,
+// };
+
 const uniqueId = {
   type: String,
-  required: true,
-  default: null,
   unique: true,
 };
 
 const userSchema = new mongoose.Schema({
   uniqueId: uniqueId,
 
+  userId: {
+    type: String,
+    default: new mongoose.Types.ObjectId(),
+    unique: true
+  },
+
+  userIP: {
+    type: String,
+    default: null
+  },
+
   name: {
     type: String,
   },
 
+  // email: {
+  //   type: String
+  // },
+
+  // phone: {
+  //   type: Number
+  // },
+
   password: {
+    type: String,
+    select: false,
+  },
+
+  confirmPassword: {
     type: String,
     select: false,
   },
@@ -34,11 +62,15 @@ const userSchema = new mongoose.Schema({
   userStatus: {
     isRegistered: {
       type: Boolean,
-      default: false,
+      default: null,
     },
     isLogin: {
       type: Boolean,
-      default: false,
+      default: null,
+    },
+    isLogout: {
+      type: Boolean,
+      default: null,
     },
     isAdmin: {
       type: Boolean,
@@ -46,11 +78,11 @@ const userSchema = new mongoose.Schema({
         return this.role === "User" ? false : true;
       },
     },
-    loginTime: {
+    lastLogin: {
       type: Date,
       default: null,
     },
-    logoutTime: {
+    lastLogout: {
       type: Date,
       default: null,
     },
@@ -73,11 +105,11 @@ const userSchema = new mongoose.Schema({
     select: true,
     default: null,
     uniqueId: uniqueId,
-    tokenCreatedAt: {
+    resetTokenCreatedAt: {
       type: Date,
       default: null,
     },
-    tokenDeletedAt: {
+    resetTokenDeletedAt: {
       type: Date,
       default: null,
     },
@@ -88,6 +120,7 @@ const userSchema = new mongoose.Schema({
       token: { type: String, defult: null },
       tokenCreatedAt: { type: Date, default: null },
       tokenLastUsedAt: { type: Date, default: null },
+      tokenDeletedAt: { type: Date, default: null },
     },
   ],
 
